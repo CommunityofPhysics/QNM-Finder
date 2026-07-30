@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "QNMF Finder": {
+      "commandName": "Project"
+    },
+    "Container (Dockerfile)": {
+      "commandName": "Docker"
+    }
+  }
+}
