@@ -1,11 +1,11 @@
 ﻿// File: Discretizer.cs
 
-using IOFramework;
-using MathNet.Numerics;
-using System.Globalization;
 using System.Numerics;
+using System.Globalization;
+using MathNet.Numerics;
+using CLACFramework;
 
-namespace CLACFramework;
+namespace QNMFinder;
 
 public static class Discretizer
 {
@@ -260,9 +260,11 @@ public static class RadialMap
     public static MapMode Mode { get; set;  }
     public static (double Left, double Right) EdgeRho { get; private set; }
 
+    public static double Width { get; set; }
     public static double Scale { get; set; }
     public static double Range { get; set; }
     private static double Factor { get; set; }
+    private static double Boost { get; set; }
 
     private static readonly double MinScale = 1e-16;
     private static readonly double MaxRange = 1e16;
@@ -270,7 +272,7 @@ public static class RadialMap
     // Configuration
     public static void Configure(string mspec)
     {
-        (Mode, Scale, Range) = Parse(mspec);
+        (Mode, Width, Scale, Range) = Parse(mspec);
 
         switch (Mode)
         {
@@ -284,11 +286,15 @@ public static class RadialMap
         }
 
         Factor = Math.Asinh(Range / Scale);
+        Boost = 2.0 * Math.Acosh(0.5 * Factor / Math.Asinh(Width / Scale));
     }
 
     // Parsing
-    public static (MapMode, double, double) Parse(string spec)
+    public static (MapMode, double, double, double) Parse(string spec)
     {
+        double scale = MinScale;
+        double range = MaxRange;
+
         if (string.IsNullOrWhiteSpace(spec)) throw new Exception("RadialMap specification is empty.");
 
         spec = spec.Trim();
@@ -311,22 +317,30 @@ public static class RadialMap
 
         string parameters = spec.Substring(p1 + 1, p2 - p1 - 1).Trim();
 
-        if (string.IsNullOrWhiteSpace(parameters)) throw new Exception($"{mode} requires at least a scale parameter.");
+        if (string.IsNullOrWhiteSpace(parameters)) throw new Exception($"{mode} requires at least a width parameter.");
 
         string[] parts = parameters.Split(',', StringSplitOptions.RemoveEmptyEntries);
 
-        if (!double.TryParse(parts[0].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out double scale))
-            throw new Exception($"Invalid scale value: '{parts[0]}'");
+        if (parts.Length < 1 || parts.Length > 3) throw new Exception($"{mode} accepts parameters as (Width), (Width, Scale), or (Width, Scale, Range).");
 
-        double range;
+        if (!double.TryParse(parts[0].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out double width))
+            throw new Exception($"Invalid width value: '{parts[0]}'");
 
-        if (parts.Length == 1)
+        width = Math.Max(Math.Abs(width), MinScale);
+
+        if (parts.Length > 1)
         {
-            range = MaxRange;
+            string scaleStr = parts[1].Trim().ToLowerInvariant();
+
+            if (double.TryParse(scaleStr, NumberStyles.Float, CultureInfo.InvariantCulture, out double parsedScale))
+                scale = Math.Max(MinScale, Math.Abs(parsedScale));
+
+            else throw new Exception($"Invalid scale value: '{scaleStr}'");
         }
-        else if (parts.Length == 2)
+
+        if (parts.Length > 2)
         {
-            string rangeStr = parts[1].Trim().ToLowerInvariant();
+            string rangeStr = parts[2].Trim().ToLowerInvariant();
 
             if (double.TryParse(rangeStr, NumberStyles.Float, CultureInfo.InvariantCulture, out double parsedRange))
                 range = Math.Min(MaxRange, Math.Abs(parsedRange));
@@ -336,45 +350,52 @@ public static class RadialMap
 
             else throw new Exception($"Invalid range value: '{rangeStr}'");
         }
-        else
-        {
-            throw new Exception($"{mode} accepts at most two parameters: [scale, range]");
-        }
 
-        scale = Math.Max(MinScale, Math.Abs(scale));
-        range = Math.Max(scale, range);
-        return (mode, scale, range);
+        range = Math.Max(1024.0 * MinScale, range);
+        scale = Math.Min(scale, range / 2.0);
+        width = Math.Min(width, Math.Sqrt(scale * range) / 2.0);
+
+        return (mode, width, scale, range);
     }
 
-    // ρ(x)
+    // rho(x)
     public static double Rho(double x) => Mode switch
     {
-        MapMode.OneSided => Scale * Math.Sinh(0.5 * Factor * (1.0 + x)),
-        MapMode.TwoSided => Scale * Math.Sinh(Factor * x),
+        MapMode.OneSided => Scale * Math.Sinh(Factor * Math.Sinh(0.5 * Boost * (1.0 + x)) / Math.Sinh(Boost)),
+        MapMode.TwoSided => Scale * Math.Sinh(Factor * Math.Sinh(Boost * x) / Math.Sinh(Boost)),
         _ => throw Unsupported()
     };
 
-    // dρ/dx
+    // drho/dx
     public static double JRhoX(double x) => Mode switch
     {
-        MapMode.OneSided => 0.5 * Factor * Scale * Math.Cosh(0.5 * Factor * (1.0 + x)),
-        MapMode.TwoSided => Factor * Scale * Math.Cosh(Factor * x),
+        MapMode.OneSided => 0.5 * Scale * Factor * Boost * Math.Cosh(Factor * Math.Sinh(0.5 * Boost * (1.0 + x)) 
+            / Math.Sinh(Boost)) * Math.Cosh(0.5 * Boost * (1.0 + x)) / Math.Sinh(Boost),
+
+        MapMode.TwoSided => Scale * Factor * Boost* Math.Cosh(Factor * Math.Sinh(Boost * x) 
+            / Math.Sinh(Boost)) * Math.Cosh(Boost * x) / Math.Sinh(Boost),
+
         _ => throw Unsupported()
     };
 
-    // x(ρ)
+    // x(rho)
     public static double X(double rho) => Mode switch
     {
-        MapMode.OneSided => (2.0 / Factor) * Math.Asinh(rho / Scale) - 1.0,
-        MapMode.TwoSided => (1.0 / Factor) * Math.Asinh(rho / Scale),
+        MapMode.OneSided => (2.0 / Boost) * Math.Asinh((Math.Asinh(rho / Scale) / Factor) * Math.Sinh(Boost)) - 1.0,
+        MapMode.TwoSided => (1.0 / Boost) * Math.Asinh((Math.Asinh(rho / Scale) / Factor) * Math.Sinh(Boost)),
+
         _ => throw Unsupported()
     };
 
-    // dx/dρ
+    // dx/drho
     public static double JXRho(double rho) => Mode switch
     {
-        MapMode.OneSided => 2.0 / (Factor * Math.Sqrt(Scale * Scale + rho * rho)),
-        MapMode.TwoSided => 1.0 / (Factor * Math.Sqrt(Scale * Scale + rho * rho)),
+        MapMode.OneSided => 2.0 * Math.Sinh(Boost) / (Boost * Factor * Math.Sqrt(Scale * Scale + rho * rho)
+                * Math.Sqrt(1.0 + Math.Pow((Math.Asinh(rho / Scale) / Factor) * Math.Sinh(Boost), 2.0))),
+
+        MapMode.TwoSided => Math.Sinh(Boost) / (Boost * Factor * Math.Sqrt(Scale * Scale + rho * rho)
+                * Math.Sqrt(1.0 + Math.Pow((Math.Asinh(rho / Scale) / Factor) * Math.Sinh(Boost), 2.0))),
+
         _ => throw Unsupported()
     };
 
