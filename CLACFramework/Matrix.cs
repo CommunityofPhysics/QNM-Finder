@@ -317,32 +317,62 @@ public sealed class MatrixC
     // Safe Eval -------------------------------------------------------
     public static (MatrixC, bool) SafeEval(Func<Complex, MatrixC> F, Complex z)
     {
-        Func<Complex, MatrixC[]> Farray = w => new MatrixC[] { F(w) };
-        (MatrixC[] arr, bool IsNaN) = MatrixC.SafeEval(Farray, z);
-        return (arr[0], IsNaN);
+        try
+        {
+            MatrixC value = F(z);
+
+            int r = value.Rows;
+            int c = value.Cols;
+
+            for (int i = 0; i < r; i++)
+            {
+                for (int j = 0; j < c; j++)
+                {
+                    if (Complex.IsNaN(value[i, j]) || Complex.IsInfinity(value[i, j]))
+                        return (value, true);
+                }
+            }
+
+            return (value, false);
+        }
+        catch
+        {
+            try
+            {
+                MatrixC probe = F(ScalarC.RandomComplex(z, 1.0));
+
+                int r = probe.Rows;
+                int c = probe.Cols;
+
+                return (MatrixC.NaN(r, c), true);
+            }
+            catch
+            {
+                return (null!, true);
+            }
+        }
     }
 
     public static (MatrixC[], bool) SafeEval(Func<Complex, MatrixC[]> F, Complex z)
     {
-        MatrixC[] probe = F(Complex.Zero);
-        int length = probe.Length;
-        int rows = probe[0].Rows;
-        int cols = probe[0].Cols;
-
         try
         {
             MatrixC[] value = F(z);
 
-            for (int k = 0; k < length; k++)
+            int l = value.Length;
+            int r = value[0].Rows;
+            int c = value[0].Cols;
+
+            for (int k = 0; k < l; k++)
             {
                 MatrixC M = value[k];
 
-                for (int i = 0; i < rows; i++)
+                for (int i = 0; i < r; i++)
                 {
-                    for (int j = 0; j < cols; j++)
+                    for (int j = 0; j < c; j++)
                     {
-                        if (Complex.IsNaN(M[i, j]))
-                            return (MatrixC.NaN(length, rows, cols), true);
+                        if (Complex.IsNaN(M[i, j]) || Complex.IsInfinity(M[i, j]))
+                            return (value, true);
                     }
                 }
             }
@@ -351,9 +381,23 @@ public sealed class MatrixC
         }
         catch
         {
-            return (MatrixC.NaN(length, rows, cols), true);
+            try
+            {
+                MatrixC[] probe = F(ScalarC.RandomComplex(z, 1.0));
+
+                int l = probe.Length;
+                int r = probe[0].Rows;
+                int c = probe[0].Cols;
+
+                return (MatrixC.NaN(l, r, c), true);
+            }
+            catch
+            {
+                return (null!, true);
+            }
         }
     }
+
 
     // LU Factorization ------------------------------------------------
     public LUFactorC LU()
@@ -432,7 +476,7 @@ public sealed class MatrixC
         return sb.ToString();
     }
 
-    public override string ToString() => Format(null);
+    public override string ToString() => Format(null!);
     public string ToString(string fmt) => Format(fmt);
 
 }

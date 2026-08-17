@@ -275,32 +275,56 @@ public sealed class VectorC
     }
 
     // Safe Eval
-
     public static (VectorC, bool) SafeEval(Func<Complex, VectorC> F, Complex z)
     {
-        Func<Complex, VectorC[]> Farray = w => new VectorC[] { F(w) };
-        (VectorC[] arr, bool IsNaN) = SafeEval(Farray, z);
-        return (arr[0], IsNaN);
+        try
+        {
+            VectorC value = F(z);
+
+            int n = value.Size;
+
+            for (int i = 0; i < n; i++)
+            {
+                if (Complex.IsNaN(value[i]) || Complex.IsInfinity(value[i]))
+                    return (value, true);
+            }
+
+            return (value, false);
+        }
+        catch
+        {
+            try
+            {
+                VectorC probe = F(ScalarC.RandomComplex(z, 1.0));
+
+                int n = probe.Size;
+
+                return (VectorC.NaN(n), true);
+            }
+            catch
+            {
+                return (null!, true);
+            }
+        }
     }
 
     public static (VectorC[], bool) SafeEval(Func<Complex, VectorC[]> F, Complex z)
     {
-        VectorC[] probe = F(Complex.Zero);
-        int length = probe.Length;
-        int size = probe[0].Size;
-
         try
         {
             VectorC[] value = F(z);
 
-            for (int k = 0; k < length; k++)
+            int l = value.Length;
+            int n = value[0].Size;
+
+            for (int k = 0; k < l; k++)
             {
                 VectorC v = value[k];
 
-                for (int i = 0; i < size; i++)
+                for (int i = 0; i < n; i++)
                 {
-                    if (Complex.IsNaN(v[i]))
-                        return (VectorC.NaN(length, size), true);
+                    if (Complex.IsNaN(v[i]) || Complex.IsInfinity(v[i]))
+                        return (value, true);
                 }
             }
 
@@ -308,7 +332,19 @@ public sealed class VectorC
         }
         catch
         {
-            return (VectorC.NaN(length, size), true);
+            try
+            {
+                VectorC[] probe = F(ScalarC.RandomComplex(z, 1.0));
+
+                int l = probe.Length;
+                int n = probe[0].Size;
+
+                return (VectorC.NaN(l, n), true);
+            }
+            catch
+            {
+                return (null!, true);
+            }
         }
     }
 

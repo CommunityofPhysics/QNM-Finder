@@ -57,6 +57,16 @@ public class ActionC
     public static ActionC Zero(int r, int c)
         => new ActionC(r, c, (x, y) => y.Clear());
 
+    public static ActionC[] Zero(int l, int r, int c)
+    {
+        ActionC[] arr = new ActionC[l];
+
+        for (int k = 0; k < l; k++)
+            arr[k] = ActionC.Zero(r, c);
+
+        return arr;
+    }
+
     public ActionC ZeroLike()
         => Zero(Rows, Cols);
 
@@ -113,6 +123,27 @@ public class ActionC
                         output[i] -= Ae[i] * scale;
                 }
             });
+    }
+
+    // NaNs ---------------------------------------------------------
+    public static ActionC NaN(int r, int c)
+    {
+        return new ActionC(r, c,
+            (x, y) =>
+            {
+                for (int i = 0; i < r; i++)
+                    y[i] = Complex.NaN;
+            });
+    }
+
+    public static ActionC[] NaN(int l, int r, int c)
+    {
+        ActionC[] arr = new ActionC[l];
+
+        for (int k = 0; k < l; k++)
+            arr[k] = ActionC.NaN(r, c);
+
+        return arr;
     }
 
     // From MatrixC ---------------------------------------------------
@@ -267,33 +298,67 @@ public class ActionC
 
     public static (ActionC, bool) SafeEval(Func<Complex, ActionC> F, Complex z)
     {
-        try { return (F(z), false); }
-        catch { return (null!, true); }
+        try
+        {
+            ActionC value = F(z);
+
+            int r = value.Rows;
+            int c = value.Cols;
+
+            return (value, false);
+        }
+        catch
+        {
+            try
+            {
+                ActionC probe = F(ScalarC.RandomComplex(z, 1.0));
+
+                int r = probe.Rows;
+                int c = probe.Cols;
+
+                return (ActionC.NaN(r, c), true);
+            }
+            catch
+            {
+                return (null!, true);
+            }
+        }
     }
 
     public static (ActionC[], bool) SafeEval(Func<Complex, ActionC[]> F, Complex z)
     {
         try
         {
-            ActionC[] probe = F(Complex.Zero);
-            int len = probe.Length;
-            int r = probe[0].Rows;
-            int c = probe[0].Cols;
-
             ActionC[] arr = F(z);
 
-            if (arr.Length != len)
-                return (new ActionC[len], true);
+            int l = arr.Length;
+            int r = arr[0].Rows;
+            int c = arr[0].Cols;
 
-            for (int k = 0; k < len; k++)
+            for (int k = 0; k < l; k++)
+            {
                 if (arr[k].Rows != r || arr[k].Cols != c)
-                    return (new ActionC[len], true);
+                    return (arr, true);
+            }
 
             return (arr, false);
         }
         catch
         {
-            return (null!, true);
+            try
+            {
+                ActionC[] probe = F(ScalarC.RandomComplex(z, 1.0));
+
+                int l = probe.Length;
+                int r = probe[0].Rows;
+                int c = probe[0].Cols;
+
+                return (ActionC.NaN(l, r, c), true);
+            }
+            catch
+            {
+                return (null!, true);
+            }
         }
     }
 
@@ -338,7 +403,7 @@ public class ActionC
 
         return A.Format(fmt);
     }
-    public override string ToString() => Format(null);
+    public override string ToString() => Format(null!);
     public string ToString(string fmt) => Format(fmt);
 
 }

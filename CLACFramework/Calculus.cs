@@ -34,7 +34,7 @@ public static class Calculus
         };
     }
 
-    // C -> VectorC
+    // VectorC -> VectorC
     public static Func<Complex, VectorC> Derivative(Func<Complex, VectorC> F)
     {
         return z =>
@@ -50,7 +50,7 @@ public static class Calculus
         };
     }
 
-    // C->MatrixC
+    // MatrixC -> MatrixC
     public static Func<Complex, MatrixC> Derivative(Func<Complex, MatrixC> F)
     {
         return z =>
@@ -66,7 +66,7 @@ public static class Calculus
         };
     }
 
-    // C -> ActionC
+    // ActionC -> ActionC
     public static Func<Complex, ActionC> Derivative(Func<Complex, ActionC> F)
     {
         return z =>
@@ -92,9 +92,45 @@ public static class Calculus
     // C -> C
     public static (Complex, List<Complex>) LoopIntegral(Func<Complex, Complex> Integrand, SqDomainC domain, int M)
     {
-        Func<Complex, Complex[]> IntArray = z => new Complex[] { Integrand(z) };
-        (Complex[] integral, List<Complex> singular) = LoopIntegral(IntArray, domain, M);
-        return (integral[0], singular);
+        double h = 1.0 / M;
+        double tb = 0.0;
+
+        (Complex zb, _) = domain.Parametrize(tb);
+        (Complex Fb, bool IsFbNaN) = ScalarC.SafeEval(Integrand, zb);
+
+        List<Complex> Singular = new List<Complex>();
+
+        if (IsFbNaN)
+        {
+            Singular.Add(zb);
+            return (Complex.NaN, Singular);
+        }
+
+        Complex sum = Complex.Zero;
+
+        for (int i = 0; i < M; i++)
+        {
+            double tf = tb + h;
+
+            (Complex zf, _) = domain.Parametrize(tf);
+            (Complex Ff, bool IsFfNaN) = ScalarC.SafeEval(Integrand, zf);
+
+            if (IsFfNaN)
+            {
+                Singular.Add(zf);
+                return (Complex.NaN, Singular);
+            }
+
+            Complex dz = zf - zb;
+
+            sum += 0.5 * (Fb + Ff) * dz;
+
+            tb = tf;
+            zb = zf;
+            Fb = Ff;
+        }
+
+        return (sum, Singular);
     }
 
     public static (Complex[], List<Complex>) LoopIntegral(Func<Complex, Complex[]> Integrand, SqDomainC domain, int M)
@@ -147,9 +183,46 @@ public static class Calculus
     // VectorC -> VectorC
     public static (VectorC, List<Complex>) LoopIntegral(Func<Complex, VectorC> Integrand, SqDomainC domain, int M)
     {
-        Func<Complex, VectorC[]> IntArray = z => new VectorC[] { Integrand(z) };
-        (VectorC[] integral, List<Complex> singular) = LoopIntegral(IntArray, domain, M);
-        return (integral[0], singular);
+        double h = 1.0 / M;
+        double tb = 0.0;
+
+        (Complex zb, _) = domain.Parametrize(tb);
+        (VectorC Fb, bool IsFbNaN) = VectorC.SafeEval(Integrand, zb);
+
+        int S = Fb.Size;
+        List<Complex> Singular = new List<Complex>();
+
+        if (IsFbNaN)
+        {
+            Singular.Add(zb);
+            return (VectorC.NaN(S), Singular);
+        }
+
+        VectorC sum = VectorC.Zero(S);
+
+        for (int i = 0; i < M; i++)
+        {
+            double tf = tb + h;
+
+            (Complex zf, _) = domain.Parametrize(tf);
+            (VectorC Ff, bool IsFfNaN) = VectorC.SafeEval(Integrand, zf);
+
+            if (IsFfNaN)
+            {
+                Singular.Add(zf);
+                return (VectorC.NaN(S), Singular);
+            }
+
+            Complex dz = zf - zb;
+
+            sum += 0.5 * (Fb + Ff) * dz;
+
+            tb = tf;
+            zb = zf;
+            Fb = Ff;
+        }
+
+        return (sum, Singular);
     }
 
     public static (VectorC[], List<Complex>) LoopIntegral(Func<Complex, VectorC[]> Integrand, SqDomainC domain, int M)
@@ -203,9 +276,48 @@ public static class Calculus
     // MatrixC -> MatrixC
     public static (MatrixC, List<Complex>) LoopIntegral(Func<Complex, MatrixC> Integrand, SqDomainC domain, int M)
     {
-        Func<Complex, MatrixC[]> IntArray = z => new MatrixC[] { Integrand(z) };
-        (MatrixC[] integral, List<Complex> singular) = LoopIntegral(IntArray, domain, M);
-        return (integral[0], singular);
+        double h = 1.0 / M;
+        double tb = 0.0;
+
+        (Complex zb, _) = domain.Parametrize(tb);
+        (MatrixC Fb, bool IsFbNaN) = MatrixC.SafeEval(Integrand, zb);
+
+        int R = Fb.Rows;
+        int C = Fb.Cols;
+
+        List<Complex> Singular = new List<Complex>();
+
+        if (IsFbNaN)
+        {
+            Singular.Add(zb);
+            return (MatrixC.NaN(R, C), Singular);
+        }
+
+        MatrixC sum = MatrixC.Zero(R, C);
+
+        for (int i = 0; i < M; i++)
+        {
+            double tf = tb + h;
+
+            (Complex zf, _) = domain.Parametrize(tf);
+            (MatrixC Ff, bool IsFfNaN) = MatrixC.SafeEval(Integrand, zf);
+
+            if (IsFfNaN)
+            {
+                Singular.Add(zf);
+                return (MatrixC.NaN(R, C), Singular);
+            }
+
+            Complex dz = zf - zb;
+
+            sum += 0.5 * (Fb + Ff) * dz;
+
+            tb = tf;
+            zb = zf;
+            Fb = Ff;
+        }
+
+        return (sum, Singular);
     }
 
     public static (MatrixC[], List<Complex>) LoopIntegral(Func<Complex, MatrixC[]> Integrand, SqDomainC domain, int M)
@@ -257,5 +369,102 @@ public static class Calculus
 
         return (sum, Singular);
     }
-    
+
+    // ActionC -> ActionC
+    public static (ActionC, List<Complex>) LoopIntegral(Func<Complex, ActionC> Integrand, SqDomainC domain, int M)
+    {
+        double h = 1.0 / M;
+        double tb = 0.0;
+
+        (Complex zb, _) = domain.Parametrize(tb);
+        (ActionC Fb, bool IsFbNaN) = ActionC.SafeEval(Integrand, zb);
+
+        int R = Fb.Rows;
+        int C = Fb.Cols;
+
+        List<Complex> Singular = new List<Complex>();
+
+        if (IsFbNaN)
+        {
+            Singular.Add(zb);
+            return (ActionC.NaN(R, C), Singular);
+        }
+
+        ActionC sum = ActionC.Zero(R, C);
+
+        for (int i = 0; i < M; i++)
+        {
+            double tf = tb + h;
+
+            (Complex zf, _) = domain.Parametrize(tf);
+            (ActionC Ff, bool IsFfNaN) = ActionC.SafeEval(Integrand, zf);
+
+            if (IsFfNaN)
+            {
+                Singular.Add(zf);
+                return (ActionC.NaN(R, C), Singular);
+            }
+
+            Complex dz = zf - zb;
+
+            sum += 0.5 * (Fb + Ff) * dz;
+
+            tb = tf;
+            zb = zf;
+            Fb = Ff;
+        }
+
+        return (sum, Singular);
+    }
+
+    public static (ActionC[], List<Complex>) LoopIntegral(Func<Complex, ActionC[]> Integrand, SqDomainC domain, int M)
+    {
+        double h = 1.0 / M;
+        double tb = 0.0;
+
+        (Complex zb, _) = domain.Parametrize(tb);
+        (ActionC[] Fb, bool IsFbNaN) = ActionC.SafeEval(Integrand, zb);
+
+        int L = Fb.Length;
+        int R = Fb[0].Rows;
+        int C = Fb[0].Cols;
+
+        List<Complex> Singular = new List<Complex>();
+
+        if (IsFbNaN)
+        {
+            Singular.Add(zb);
+            return (ActionC.NaN(L, R, C), Singular);
+        }
+
+        ActionC[] sum = ActionC.Zero(L, R, C);
+
+        for (int i = 0; i < M; i++)
+        {
+            double tf = tb + h;
+
+            (Complex zf, _) = domain.Parametrize(tf);
+            (ActionC[] Ff, bool IsFfNaN) = ActionC.SafeEval(Integrand, zf);
+
+            if (IsFfNaN)
+            {
+                Singular.Add(zf);
+                return (ActionC.NaN(L, R, C), Singular);
+            }
+
+            Complex dz = zf - zb;
+
+            for (int l = 0; l < L; l++)
+            {
+                sum[l] += 0.5 * (Fb[l] + Ff[l]) * dz;
+            }
+
+            tb = tf;
+            zb = zf;
+            Fb = Ff;
+        }
+
+        return (sum, Singular);
+    }
+
 }

@@ -66,32 +66,60 @@ public sealed class ScalarC
 
     public static (Complex, bool) SafeEval(Func<Complex, Complex> F, Complex z)
     {
-        Func<Complex, Complex[]> FuncArray = w => new Complex[] { F(w) };
-        (Complex[] arr, bool IsNaN) = SafeEval(FuncArray, z);
-        return (arr[0], IsNaN);
+        try
+        {
+            Complex value = F(z);
+
+            if (Complex.IsNaN(value) || Complex.IsInfinity(value))
+                return (value, true);
+
+            return (value, false);
+        }
+        catch
+        {
+            return (Complex.NaN, true);
+        }
     }
 
     public static (Complex[], bool) SafeEval(Func<Complex, Complex[]> F, Complex z)
     {
-        int l = F(Complex.Zero).Length;
-
         try
         {
             Complex[] value = F(z);
 
+            int l = value.Length;
+
             for (int k = 0; k < l; k++)
             {
-                if (Complex.IsNaN(value[k]))
-                    return (ScalarC.NaN(l), true);
+                if (Complex.IsNaN(value[k]) || Complex.IsInfinity(value[k]))
+                    return (value, true);
             }
 
             return (value, false);
         }
         catch
         {
-            return (ScalarC.NaN(l), true);
+            try
+            {
+                Complex[] probe = F(ScalarC.RandomComplex(z, 1.0));
+                int l = probe.Length;
+                return (ScalarC.NaN(l), true);
+            }
+            catch
+            {
+                return (null!, true);
+            }
         }
+    }
 
+    public static Complex RandomComplex(Complex center, double radius)
+    {
+        Random rng = Random.Shared;
+
+        double theta = 2.0 * Math.PI * rng.NextDouble();
+        double r = radius * Math.Sqrt(rng.NextDouble());
+
+        return center + Complex.FromPolarCoordinates(r, theta);
     }
 
     public static Complex PUDifference(Complex zf, Complex zi)
@@ -122,10 +150,13 @@ public sealed class ScalarC
         if (parts.Length != 2)
             throw new Exception($"ScalarC requires two components: '{spec}'");
 
-        if (!double.TryParse(parts[0].Trim(), out double re))
+        string reText = string.Concat(parts[0].Where(c => !char.IsWhiteSpace(c)));
+        string imText = string.Concat(parts[1].Where(c => !char.IsWhiteSpace(c)));
+
+        if (!double.TryParse(reText, out double re))
             throw new Exception($"Invalid real part in ScalarC: '{parts[0]}'");
 
-        if (!double.TryParse(parts[1].Trim(), out double im))
+        if (!double.TryParse(imText, out double im))
             throw new Exception($"Invalid imaginary part in ScalarC: '{parts[1]}'");
 
         return new Complex(re, im);
@@ -288,7 +319,7 @@ public sealed class DomainC
         return $"[C: {c}, W: {w}, H: {h}]";
     }
 
-    public override string ToString() => Format(null);
+    public override string ToString() => Format(null!);
     public string ToString(string fmt) => Format(fmt);
 
 }
@@ -356,7 +387,7 @@ public sealed class SqDomainC
         return $"[C: {c}, E: {e}]";
     }
 
-    public override string ToString() => Format(null);
+    public override string ToString() => Format(null!);
     public string ToString(string fmt) => Format(fmt);
 
 }
