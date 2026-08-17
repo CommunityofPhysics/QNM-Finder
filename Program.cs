@@ -40,6 +40,7 @@ class Program
 
         // --- Estimator ---
         int M = Math.Max(config.M, 4);        // Quadrature number
+        int V = Math.Max(config.V, 0);        // Depth parameter
 
         // --- Seeder ---
         int L = Math.Max(config.L, 1);        // Lapping number
@@ -89,7 +90,7 @@ class Program
         File.Copy("Config.xml", configCopyPath, overwrite: true);
 
         // Compute interval numbers
-        Intervals interval = new Intervals(N, L);
+        Intervals interval = new Intervals(N, L, J);
 
         // ============================================================
         // Run the Guesser
@@ -131,7 +132,7 @@ class Program
         Logger.WriteBoth("");
 
         Estimator estimator = new Estimator(kernel);
-        (List<EigenPair> estimates, List<Complex> singularities) = estimator.EstimateQNM(beynPencil, domains, M);
+        (List<EigenPair> estimates, List<Complex> singularities) = estimator.EstimateQNM(beynPencil, domains, M, V);
 
         if (!Logger.ToConsole) Console.Write($"\r{"",-40}\r\u001b[1A");
         Logger.WriteBoth($"\nEstimator finished running with {estimates.Count} eigenpairs.");
@@ -191,7 +192,7 @@ class Program
         // Run the Superfiner
         // ============================================================
 
-        Logger.WriteBoth($"\nRunning Superfiner on {feeds.Count} feeds with {interval.SuperfinerBase.NP} base collocation points...");
+        Logger.WriteBoth($"\nRunning Superfiner on {feeds.Count} feeds with {interval.SuperfinerMax.NP} collocation points...");
 
         Superfiner superfiner = new Superfiner(kernel);
         (List<EigenPair> superfined, List<EstimatedLimit> polished) = superfiner.SuperfineQNM(feeds, I, J);
