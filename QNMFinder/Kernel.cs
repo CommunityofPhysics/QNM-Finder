@@ -75,7 +75,9 @@ public sealed class Kernel
     {
         RadialMap.Configure(config.MapSpec);
 
-        Transformer.Configure(config.TRBlend, config.TRParams);
+        Blender.Configure(config.TRBlend);
+
+        Transformer.Configure(config.TRParams);
 
         Func<double, Complex>[,] rawSystemEC
             = Initiator.CompileSystemFunctions(config.SystemEC, config.SystemFP, config.Physics);

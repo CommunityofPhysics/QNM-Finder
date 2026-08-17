@@ -12,16 +12,9 @@ public enum TRMode
     Inert, Deradiate, Manual, Composite
 }
 
-public sealed class TRSpec
+public enum TRType
 {
-    public TRMode Mode { get; }
-    public Complex Exp { get; }
-
-    public TRSpec(TRMode mode, Complex exp)
-    {  
-        Mode = mode; 
-        Exp = exp; 
-    }
+    Inert, Constant, Variable, Mixed
 }
 
 public enum BlendType
@@ -29,76 +22,30 @@ public enum BlendType
     OneSided, TwoSided
 }
 
+public sealed class TRSpec
+{
+    public TRMode Mode { get; }
+    public Complex Exp { get; }
+
+    public TRSpec(TRMode mode, Complex exp)
+    {
+        Mode = mode;
+        Exp = exp;
+    }
+}
+
+// ==============================================================
+// Transformation System
+// ==============================================================
+
 public static class Transformer
 {
-    public static double Scale { get; private set; }
-    public static double Range { get; private set; }
-    public static double Factor { get; private set; }
-
     public static TRSpec[] TRSpecs { get; private set; } = new TRSpec[2];
 
-    public static void Configure(string trBlend, string[] trParams)
+    public static void Configure(string[] trParams)
     {
-        double[] trBlendParams = ParseBlend(trBlend);
-
-        Scale = trBlendParams[0];
-        Range = RadialMap.Range;
-        Factor = Math.Sqrt(1 + (Scale * Scale) / (Range * Range));
-
         for (int i = 0; i < 2; i++)
             TRSpecs[i] = Parse(trParams[i]);
-    }
-
-    // ==============================================================
-    // String Parsers
-    // ==============================================================
-
-    // Blend settings parser
-    public static double[] ParseBlend(string spec)
-    {
-        if (string.IsNullOrWhiteSpace(spec))
-            throw new Exception("Empty specification.");
-
-        string s = spec.Trim().ToLowerInvariant();
-
-        // Locate '(' and ')'
-        int p1 = s.IndexOf('(');
-        int p2 = s.LastIndexOf(')');
-
-        if (p1 < 0 || p2 < 0 || p2 <= p1)
-            throw new Exception($"Invalid format: '{spec}'");
-
-        // Extract tag (ignored for now)
-        string tag = s.Substring(0, p1).Trim();
-        if (tag.Length == 0)
-            throw new Exception($"Missing tag name in '{spec}'");
-
-        if (tag != "global")
-            throw new Exception($"Specification must start with 'Global': '{spec}'");
-
-        // Extract inside parentheses
-        string inner = s.Substring(p1 + 1, p2 - p1 - 1).Trim();
-        if (inner.Length == 0)
-            throw new Exception($"Tag '{tag}' must contain at least one numeric argument.");
-
-        // Split by comma
-        string[] parts = inner.Split(',');
-
-        double[] values = new double[parts.Length];
-
-        for (int i = 0; i < parts.Length; i++)
-        {
-            string token = parts[i].Trim();
-
-            if (!double.TryParse(token, NumberStyles.Float, CultureInfo.InvariantCulture, out double val))
-            {
-                throw new Exception($"Invalid numeric value '{token}' in tag '{tag}'");
-            }
-
-            values[i] = val;
-        }
-
-        return values;
     }
 
     // Specification parser
@@ -157,63 +104,6 @@ public static class Transformer
         return new TRSpec(isManual ? TRMode.Manual : TRMode.Composite, exp);
     }
 
-    // ==============================================================
-    // Blend Functions
-    // ==============================================================
-    public static double Blend(double rho) => RadialMap.Mode switch
-    {
-        MapMode.OneSided => 
-            rho * (Scale / Range) * (Scale / Range) * Math.Sqrt(rho * rho + Scale * Scale)
-            / ((Scale * Scale * Scale * Scale) / ((2.0 * rho * rho + Scale * Scale) + 2.0 * rho * Math.Sqrt(rho * rho + Scale * Scale))
-            + ((Scale / Range) * (Scale / Range) / (Factor + 1.0)) * (2.0 * rho * rho + Scale * Scale)),
-
-        MapMode.TwoSided =>
-            0.5 * (1 + Factor * rho / Math.Sqrt(rho * rho + Scale * Scale)),
-
-        _ => throw RadialMap.Unsupported()
-    };
-
-    public static double DBlend(double rho) => RadialMap.Mode switch
-    {
-        MapMode.OneSided =>
-            Factor * (Scale * Scale * Scale * Scale) * (Scale / Range) * (Scale / Range) / (Math.Sqrt(rho * rho + Scale * Scale)
-            * ((Scale * Scale * Scale * Scale) / ((2.0 * rho * rho + Scale * Scale) + 2.0 * rho * Math.Sqrt(rho * rho + Scale * Scale))
-            + ((Scale / Range) * (Scale / Range) / (Factor + 1.0)) * (2.0 * rho * rho + Scale * Scale))
-            * ((Scale * Scale * Scale * Scale) / ((2.0 * rho * rho + Scale * Scale) + 2.0 * rho * Math.Sqrt(rho * rho + Scale * Scale))
-            + ((Scale / Range) * (Scale / Range) / (Factor + 1.0)) * (2.0 * rho * rho + Scale * Scale))),
-
-        MapMode.TwoSided =>
-            0.5 * Factor * Scale * Scale / ((rho * rho + Scale * Scale) * Math.Sqrt(rho * rho + Scale * Scale)),
-
-        _ => throw RadialMap.Unsupported()
-    };
-
-    public static double DDBlend(double rho) => RadialMap.Mode switch
-    {
-        MapMode.OneSided =>
-            Factor * (Scale * Scale * Scale * Scale) * (Scale / Range) * (Scale / Range)
-            * (((Scale * Scale * Scale * Scale) * (rho * rho + Scale * Scale) * (15.0 * rho * rho + 16.0 * Scale * Scale))
-            / ((10.0 * rho * rho * rho * rho + 14.0 * Scale * Scale * rho * rho + 4.0 * Scale * Scale * Scale * Scale) 
-            + rho * (10.0 * rho * rho + 9.0 * Scale * Scale) * Math.Sqrt(rho * rho + Scale * Scale)) 
-            - ((Scale / Range) * (Scale / Range) / (Factor + 1.0)) * rho * (10.0 * rho * rho + 9.0 * Scale * Scale) * Math.Sqrt(rho * rho + Scale * Scale))
-            / ((rho * rho + Scale * Scale) * (rho * rho + Scale * Scale) * ((Scale * Scale * Scale * Scale) 
-            / ((2.0 * rho * rho + Scale * Scale) + 2.0 * rho * Math.Sqrt(rho * rho + Scale * Scale)) 
-            + ((Scale / Range) * (Scale / Range) / (Factor + 1.0)) * (2.0 * rho * rho + Scale * Scale))
-            * ((Scale * Scale * Scale * Scale) / ((2.0 * rho * rho + Scale * Scale) + 2.0 * rho * Math.Sqrt(rho * rho + Scale * Scale))
-            + ((Scale / Range) * (Scale / Range) / (Factor + 1.0)) * (2.0 * rho * rho + Scale * Scale))
-            * ((Scale * Scale * Scale * Scale) / ((2.0 * rho * rho + Scale * Scale) + 2.0 * rho * Math.Sqrt(rho * rho + Scale * Scale))
-            + ((Scale / Range) * (Scale / Range) / (Factor + 1.0)) * (2.0 * rho * rho + Scale * Scale))),
-
-        MapMode.TwoSided => -1.5 * Factor * rho * Scale * Scale / ((rho * rho + Scale * Scale) * (rho * rho + Scale * Scale) * Math.Sqrt(rho * rho + Scale * Scale)),
-
-        _ => throw RadialMap.Unsupported()
-    };
-
-}
-
-public enum TRType
-{
-    Inert, Constant, Variable, Mixed
 }
 
 public sealed class TRPrimit
@@ -416,7 +306,7 @@ public static class Transform
         {
             TGJ[0, 0] = (rho, om) =>
             {
-                double b = Transformer.Blend(rho);
+                double b = Blender.Blend(rho);
                 Complex GL = GetValue(L, om);
                 Complex GR = GetValue(R, om);
                 return (1.0 - b) * GL + b * GR;
@@ -424,7 +314,7 @@ public static class Transform
 
             TGJ[0, 1] = (rho, om) =>
             {
-                double db = Transformer.DBlend(rho);
+                double db = Blender.DBlend(rho);
                 Complex GL = GetValue(L, om);
                 Complex GR = GetValue(R, om);
                 return db * (GR - GL);
@@ -432,7 +322,7 @@ public static class Transform
 
             TGJ[0, 2] = (rho, om) =>
             {
-                double ddb = Transformer.DDBlend(rho);
+                double ddb = Blender.DDBlend(rho);
                 Complex GL = GetValue(L, om);
                 Complex GR = GetValue(R, om);
                 return ddb * (GR - GL);
@@ -440,7 +330,7 @@ public static class Transform
 
             TGJ[1, 0] = (rho, om) =>
             {
-                double b = Transformer.Blend(rho);
+                double b = Blender.Blend(rho);
                 Complex dGL = GetRValue(L, om);
                 Complex dGR = GetRValue(R, om);
                 return (1.0 - b) * dGL + b * dGR;
@@ -448,7 +338,7 @@ public static class Transform
 
             TGJ[1, 1] = (rho, om) =>
             {
-                double db = Transformer.DBlend(rho);
+                double db = Blender.DBlend(rho);
                 Complex dGL = GetRValue(L, om);
                 Complex dGR = GetRValue(R, om);
                 return db * (dGR - dGL);
@@ -456,7 +346,7 @@ public static class Transform
 
             TGJ[1, 2] = (rho, om) =>
             {
-                double ddb = Transformer.DDBlend(rho);
+                double ddb = Blender.DDBlend(rho);
                 Complex dGL = GetRValue(L, om);
                 Complex dGR = GetRValue(R, om);
                 return ddb * (dGR - dGL);
@@ -570,5 +460,138 @@ public static class Transform
             _ => Complex.Zero
         };
     }
+
+}
+
+// ==============================================================
+// Blender System
+// ==============================================================
+public static class Blender
+{
+    private static double Stiff { get; set; }
+    private static double Width { get; set; }
+    private static double Scale { get; set; }
+    private static double Range { get; set; }
+    private static double Factor { get; set; }
+    private static double Boost { get; set; }
+
+    public static void Configure(string trBlend)
+    {
+        (Stiff, Width, Scale, Range) = Parse(trBlend);
+
+        Factor = Math.Asinh(Range / Scale);
+        Boost = 2.0 * Math.Acosh(0.5 * Factor / Math.Asinh(Width / Scale));
+    }
+
+    // Blend Specification Parser
+    public static (double, double, double, double) Parse(string spec)
+    {
+        const double Tiny = 1e-10;
+
+        double width = RadialMap.Width;
+        double scale = RadialMap.Scale;
+        double range = RadialMap.Range;
+
+        if (string.IsNullOrWhiteSpace(spec)) throw new Exception("Blender specification is empty.");
+
+        spec = spec.Trim();
+
+        int p1 = spec.IndexOf('(');
+        int p2 = spec.LastIndexOf(')');
+
+        if (p1 < 0 || p2 < 0 || p2 <= p1)
+            throw new Exception($"Invalid Blender specification: {spec}");
+
+        string nameStr = new string(spec.Substring(0, p1).Trim().ToLowerInvariant()
+            .Where(c => !char.IsWhiteSpace(c)).ToArray());
+        if (nameStr != "blend") throw new Exception($"Blender name '{nameStr}' is unsupported. It must start with 'Blend'");
+
+        string parameters = spec.Substring(p1 + 1, p2 - p1 - 1).Trim();
+
+        if (string.IsNullOrWhiteSpace(parameters)) throw new Exception($"Blender requires at least a stiff parameter.");
+
+        string[] parts = parameters.Split(',', StringSplitOptions.RemoveEmptyEntries);
+
+        if (parts.Length < 1 || parts.Length > 3) throw new Exception($"Blender accepts parameters as (Stiff), (Stiff, Width), or (Stiff, Width, Scale).");
+
+        if (!double.TryParse(parts[0].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out double stiff))
+            throw new Exception($"Invalid stiff value: '{parts[0]}'");
+
+        stiff = Math.Max(Math.Abs(stiff), Tiny);
+
+        if (parts.Length > 1)
+        {
+            string widthStr = parts[1].Trim().ToLowerInvariant();
+
+            if (double.TryParse(widthStr, NumberStyles.Float, CultureInfo.InvariantCulture, out double parsedWidth))
+                width = Math.Max(Math.Abs(parsedWidth), Tiny);
+
+            else throw new Exception($"Invalid width value: '{widthStr}'");
+        }
+
+        if (parts.Length > 2)
+        {
+            string scaleStr = parts[2].Trim().ToLowerInvariant();
+
+            if (double.TryParse(scaleStr, NumberStyles.Float, CultureInfo.InvariantCulture, out double parsedScale))
+                scale = Math.Max(Math.Abs(parsedScale), Tiny);
+
+            else throw new Exception($"Invalid scale value: '{scaleStr}'");
+        }
+
+        scale = Math.Min(scale, range / 2.0);
+        width = Math.Min(width, Math.Sqrt(scale * range) / 2.0);
+
+        return (stiff, width, scale, range);
+    }
+
+    // Blend Function
+    public static double Blend(double rho) => RadialMap.Mode switch
+    {
+        MapMode.OneSided => 0.5 * (1.0 + Math.Tanh(Stiff * ((2.0 / Boost) * Math.Asinh((Math.Asinh(rho / Scale) / Factor) * Math.Sinh(Boost)) - 1.0)) / Math.Tanh(Stiff)),
+        MapMode.TwoSided => 0.5 * (1.0 + Math.Tanh(Stiff * ((1.0 / Boost) * Math.Asinh((Math.Asinh(rho / Scale) / Factor) * Math.Sinh(Boost)))) / Math.Tanh(Stiff)),
+
+        _ => throw RadialMap.Unsupported()
+    };
+
+    // Derivative of Blend Function
+    public static double DBlend(double rho) => RadialMap.Mode switch
+    {
+        MapMode.OneSided => Stiff * Math.Sinh(Boost) / (Boost * Factor * Math.Sqrt(1.0 + (Math.Sinh(Boost) * Math.Sinh(Boost))
+            * (Math.Asinh(rho / Scale) * Math.Asinh(rho / Scale)) / (Factor * Factor)) * Math.Sqrt(Scale * Scale + rho * rho)
+            * Math.Pow(Math.Cosh(Stiff * (-1.0 + 2.0 * Math.Asinh(Math.Sinh(Boost) * Math.Asinh(rho / Scale) / Factor) / Boost)), 2.0) * Math.Tanh(Stiff)),
+
+        MapMode.TwoSided => 0.5 * Stiff * Math.Sinh(Boost) / (Boost * Factor * Math.Sqrt(1.0 + (Math.Sinh(Boost) * Math.Sinh(Boost))
+            * (Math.Asinh(rho / Scale) * Math.Asinh(rho / Scale)) / (Factor * Factor)) * Math.Sqrt(Scale * Scale + rho * rho)
+            * Math.Pow(Math.Cosh(Stiff * Math.Asinh(Math.Sinh(Boost) * Math.Asinh(rho / Scale) / Factor) / Boost), 2.0) * Math.Tanh(Stiff)),
+
+        _ => throw RadialMap.Unsupported()
+    };
+
+    // Second Derivative of Blend Function
+    public static double DDBlend(double rho) => RadialMap.Mode switch
+    {
+        MapMode.OneSided => 0.5 * Stiff * (-8.0 * Stiff * (Math.Sinh(Boost) * Math.Sinh(Boost)) * Math.Tanh(Stiff * (-1.0 + 2.0 * Math.Asinh(Math.Sinh(Boost)
+            * Math.Asinh(rho / Scale) / Factor) / Boost)) / (Boost * Boost * Factor * Factor * (1.0 + (Math.Sinh(Boost) * Math.Sinh(Boost))
+            * (Math.Asinh(rho / Scale) * Math.Asinh(rho / Scale)) / (Factor * Factor)) * (Scale * Scale + rho * rho)) - 2.0 * rho * Math.Sinh(Boost)
+            / (Boost * Factor * Math.Sqrt(1.0 + (Math.Sinh(Boost) * Math.Sinh(Boost)) * (Math.Asinh(rho / Scale) * Math.Asinh(rho / Scale)) / (Factor * Factor))
+            * (Scale * Scale + rho * rho) * Math.Sqrt(Scale * Scale + rho * rho)) - 2.0 * Math.Pow(Math.Sinh(Boost), 3.0) * Math.Asinh(rho / Scale)
+            / (Boost * Math.Pow(Factor, 3.0) * Scale * Math.Sqrt(1.0 + (rho * rho) / (Scale * Scale)) * (1.0 + (Math.Sinh(Boost) * Math.Sinh(Boost))
+            * (Math.Asinh(rho / Scale) * Math.Asinh(rho / Scale)) / (Factor * Factor)) * Math.Sqrt(1.0 + (Math.Sinh(Boost) * Math.Sinh(Boost))
+            * (Math.Asinh(rho / Scale) * Math.Asinh(rho / Scale)) / (Factor * Factor)) * Math.Sqrt(Scale * Scale + rho * rho)))
+            / (Math.Pow(Math.Cosh(Stiff * (-1.0 + 2.0 * Math.Asinh(Math.Sinh(Boost) * Math.Asinh(rho / Scale) / Factor) / Boost)), 2.0) * Math.Tanh(Stiff)),
+
+        MapMode.TwoSided => 0.5 * Stiff * (-2.0 * Stiff * (Math.Sinh(Boost) * Math.Sinh(Boost)) * Math.Tanh(Stiff * Math.Asinh(Math.Sinh(Boost)
+            * Math.Asinh(rho / Scale) / Factor) / Boost) / (Boost * Boost * Factor * Factor * (1.0 + (Math.Sinh(Boost) * Math.Sinh(Boost))
+            * (Math.Asinh(rho / Scale) * Math.Asinh(rho / Scale)) / (Factor * Factor)) * (Scale * Scale + rho * rho)) - rho * Math.Sinh(Boost)
+            / (Boost * Factor * Math.Sqrt(1.0 + (Math.Sinh(Boost) * Math.Sinh(Boost)) * (Math.Asinh(rho / Scale) * Math.Asinh(rho / Scale))
+            / (Factor * Factor)) * (Scale * Scale + rho * rho) * Math.Sqrt(Scale * Scale + rho * rho)) - Math.Pow(Math.Sinh(Boost), 3.0) * Math.Asinh(rho / Scale)
+            / (Boost * Math.Pow(Factor, 3.0) * Scale * Math.Sqrt(1.0 + (rho * rho) / (Scale * Scale)) * (1.0 + (Math.Sinh(Boost) * Math.Sinh(Boost))
+            * (Math.Asinh(rho / Scale) * Math.Asinh(rho / Scale)) / (Factor * Factor)) * Math.Sqrt(1.0 + (Math.Sinh(Boost) * Math.Sinh(Boost))
+            * (Math.Asinh(rho / Scale) * Math.Asinh(rho / Scale)) / (Factor * Factor)) * Math.Sqrt(Scale * Scale + rho * rho)))
+            / (Math.Pow(Math.Cosh(Stiff * Math.Asinh(Math.Sinh(Boost) * Math.Asinh(rho / Scale) / Factor) / Boost), 2.0) * Math.Tanh(Stiff)),
+
+        _ => throw RadialMap.Unsupported()
+    };
 
 }

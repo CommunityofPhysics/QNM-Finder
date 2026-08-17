@@ -10,7 +10,7 @@ public static class Edge
 {
     public static (bool[], Func<Complex, Complex>[][], Func<Complex, Complex>[][]) SigmaMaps(Func<double, Complex>[,] rawSystemEC)
     {
-        const double tol = 1e-12;
+        const double tiny = 1e-14;
         const double huge = 1e8;
 
         (double leftRho, double rightRho) = RadialMap.EdgeRho;
@@ -34,7 +34,7 @@ public static class Edge
             IsBadSigma[side] = false;
 
             // 1. A ≈ 0 AND B ≈ 0  → rawSigma returns NaN for all ω
-            if (epREC[0, 2].Magnitude < tol && epREC[0, 1].Magnitude + epREC[1, 1].Magnitude < tol)
+            if (epREC[0, 2].Magnitude < tiny && epREC[0, 1].Magnitude + epREC[1, 1].Magnitude < tiny)
                 IsBadSigma[side] = true;
 
             // 2. Huge C-term → σ ≈ sqrt(C/A) becomes huge for BOTH branches
@@ -53,9 +53,9 @@ public static class Edge
                     Complex B = epREC[0, 1] + omega * epREC[1, 1];
                     Complex C = epREC[0, 0] + omega * epREC[1, 0] + omega * omega * epREC[2, 0];
 
-                    if (A.Magnitude < tol && B.Magnitude < tol) return Complex.NaN;
+                    if (A.Magnitude < tiny && B.Magnitude < tiny) return Complex.NaN;
 
-                    if (A.Magnitude < tol) return C / B;
+                    if (A.Magnitude < tiny) return C / B;
 
                     Complex disc = B * B - 4.0 * A * C;
                     return (B + sign * ScalarC.SafeSqrt(disc)) / (2.0 * A);
@@ -65,19 +65,32 @@ public static class Edge
                 {
                     Complex A = epREC[0, 2];
                     Complex B = epREC[0, 1] + omega * epREC[1, 1];
+                    Complex C = epREC[0, 0] + omega * epREC[1, 0] + omega * omega * epREC[2, 0];
 
                     Complex RB = epREC[1, 1];
                     Complex RC = epREC[1, 0] + 2.0 * omega * epREC[2, 0];
 
-                    if (A.Magnitude < tol && B.Magnitude < tol)
-                        return Complex.NaN;
+                    if (A.Magnitude < tiny && B.Magnitude < tiny) return Complex.NaN;
 
-                    // Use the already-selected branch
+                    if (A.Magnitude < tiny) return (RC * B - C * RB) / (B * B);
+
                     Complex sigma = rawSigma(omega);
+                    Complex numer = RB * sigma - RC;
                     Complex denom = 2.0 * A * sigma - B;
-                    if (denom.Magnitude < tol) return Complex.NaN; // branch point
 
-                    return (RB * sigma - RC) / denom;
+                    if (denom.Magnitude < tiny)
+                    {
+                        if (numer.Magnitude < tiny)
+                        {
+                            Complex RRC = 2.0 * epREC[2, 0];               // C'' (B''=0 always, B is linear)
+                            Complex Rdisc = RB * RB - 2.0 * A * RRC;
+                            return (RB + sign * ScalarC.SafeSqrt(Rdisc)) / (2.0 * A);
+                        }
+
+                        return Complex.NaN;
+                    }
+
+                    return numer / denom;
                 };
 
                 rawSigmaStack[branch] = new[] { rawSigma, rawRSigma };
@@ -90,6 +103,7 @@ public static class Edge
             SigmaIn[side] = (side == 0) ? rightSigma : leftSigma;
             SigmaOut[side] = (side == 0) ? leftSigma : rightSigma;
         }
+
         return (IsBadSigma, SigmaIn, SigmaOut);
     }
 

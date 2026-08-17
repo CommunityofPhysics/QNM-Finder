@@ -11,12 +11,12 @@ public readonly record struct Nodes(int N)
     public int NP => N + 1;   // nodes
 }
 
-public readonly record struct Intervals(int N, int L)
+public readonly record struct Intervals(int N, int L, int J)
 {
     public Nodes Guesser => new Nodes(N);
     public Nodes Estimator => new Nodes(2 * N);
     public Nodes Refiner => new Nodes(2 * L * N);
-    public Nodes SuperfinerBase => Refiner;
+    public Nodes SuperfinerMax => new Nodes(2 * L * N * (1 << J));
 }
 
 public sealed record EigenPair(Complex Value, VectorC Mode, double Residual)
@@ -209,8 +209,15 @@ public static class Bridge
             Console.Write("\nTo superfine, enter the QNM indices (comma-separated): ");
             string? line = Console.ReadLine();
 
-            int[] nums = line!.Split(',', StringSplitOptions.RemoveEmptyEntries).Select(s => s.Trim())
-                .Where(s => int.TryParse(s, out _)).Select(int.Parse).Distinct().OrderBy(i => i).ToArray();
+            string[] tokens = (line ?? "").Trim().ToLowerInvariant().Split(new[] { ',', ' ', '\t', ';' }, StringSplitOptions
+                .RemoveEmptyEntries).Select(s => s.Trim()).Where(s => !string.IsNullOrWhiteSpace(s)).ToArray();
+
+            if (tokens.Any(s => s == "automatic" || s == "auto" || s == "all"))
+            {
+                return refined.Select(ep => new EigenPair(ep.Value, ep.Mode, ep.Residual)).ToList();
+            }
+
+            int[] nums = tokens.Where(s => int.TryParse(s, out _)).Select(int.Parse).Distinct().OrderBy(i => i).ToArray();
 
             List<EigenPair> feeds = new List<EigenPair>(nums.Length);
             List<int> bad = new List<int>();

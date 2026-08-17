@@ -32,13 +32,14 @@ public sealed class Superfiner
             Logger.WriteBoth($"\nMode {k:D2}: Superfining frequency {omega.Format("F16")}...");
 
             int IP = I;
-            int jp = 0;
+            int jP = 0;
+
             Complex[] omegas = new Complex[J];
 
             for (int j = 0; j < J; j++)
             {
-                jp = j + 1;
-                IP = Math.Max(4, IP / 2);
+                IP = Math.Max(8, IP / 2);
+                jP = j + 1;
 
                 y = Discretizer.Interpolate(y, 2);
                 int NP = y.Size;
@@ -47,7 +48,7 @@ public sealed class Superfiner
                 Logger.WriteLine("");
 
                 feed = new EigenPair(omega, y, residual);
-                superfinedEP = SuperfineSingleQNM(feed, IP, jp);
+                superfinedEP = SuperfineSingleQNM(feed, IP, jP);
 
                 (omega, y, residual) = superfinedEP;
                 omegas[j] = omega;

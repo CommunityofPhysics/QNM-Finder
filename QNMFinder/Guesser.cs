@@ -242,30 +242,42 @@ public sealed class Guesser
 
         for (int iter = 0; iter < maxIter; iter++)
         {
-            // Build T(W)
             MatrixC TW = T(W);
+
             int NP = TW.Rows;
             int N = NP - 1;
 
-            // Extract 2×2 boundary block
+            // Check boundary block
             Complex a = TW[0, 0];
             Complex b = TW[0, N];
             Complex c = TW[N, 0];
             Complex d = TW[N, N];
 
-            Complex det = a * d - b * c;
+            Complex detBB = a * d - b * c;
 
-            if (det.Magnitude > eps)
+            bool boundaryBlockInvertible = detBB.Magnitude > eps;
+
+            bool matrixInvertible;
+            try
+            {
+                _ = TW.LU();
+                matrixInvertible = true;
+            }
+            catch
+            {
+                matrixInvertible = false;
+            }
+
+            if (boundaryBlockInvertible && matrixInvertible)
                 return W;
 
-            // Otherwise perturb W slightly
-            double re = (rng.NextDouble() - 0.5);
-            double im = (rng.NextDouble() - 0.5);
+            double re = rng.NextDouble() - 0.5;
+            double im = rng.NextDouble() - 0.5;
 
             W += new Complex(re, im);
         }
 
-        throw new Exception("Failed to find invertible boundary block TBB(W) after 10 perturbations.");
+        throw new Exception("Failed to find W with invertible T(W) and boundary block.");
     }
 
 }

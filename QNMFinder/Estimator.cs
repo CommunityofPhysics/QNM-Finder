@@ -22,7 +22,7 @@ public sealed class Estimator
     // 1. Main QNM locator
     // ===================================================
 
-    public (List<EigenPair>, List<Complex>) EstimateQNM(MatrixC beynPencil, SqDomainC[] domains, int M)
+    public (List<EigenPair>, List<Complex>) EstimateQNM(MatrixC beynPencil, SqDomainC[] domains, int M, int V)
     {
         int NP = beynPencil.Rows;
         int N = NP - 1;
@@ -35,7 +35,7 @@ public sealed class Estimator
             _area.total += domain.Area;
         }
 
-        Depth depth = new Depth(0, 5);
+        Depth depth = new Depth(0, V);
 
         List<EigenPair> rootEstimates = new List<EigenPair>();
         List<Complex> rootSingularities = new List<Complex>();
