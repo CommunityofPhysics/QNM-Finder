@@ -1,0 +1,132 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+
+<!-- File: Config.xml -->
+
+<Config>
+  <!-- w = width, s = scale, r = range. Finite(w, s, r), BiFinite(w, s, r), Infinite(w, s), BiInfinite(w, s) -->
+  <!-- r = Inf/Infinity => Infinite(s), BiInfinite(s) -->
+  <RadialMap> Finite(5, 0.001, 1e8) </RadialMap>
+
+  <!-- Physics parameters: all value-provided, all treated as double. -->
+  <Parameters>
+    <sigma> 0.1 </sigma>
+    <gamma> 1.0 </gamma>
+    <mu> 0.0 </mu>
+    <m> 1 </m>
+    <k> 1.0 </k>
+  </Parameters>
+
+  <!-- System Functions. Definitions must follow C# Math syntax. Free variable is explicitly typed here; all other symbols are taken from <Parameters>. -->
+  <!-- For piecewise functions: <EC i="" j=""> <![CDATA[ rho switch { < a => f(rho), < b  => g(rho), _ => h(rho) }]]> </EC> -->
+  <!-- For external functions: <EC i="" j=""> Namespace.Class.Function(rho) </EC> -->
+  <EquationCoefficients free="double rho">
+    <!-- omega^0 coefficients -->
+    <EC i="0" j="0"> - (Math.Pow(rho, 8 * sigma * sigma / (1 - 2 * sigma)) * (m * m * Math.Pow(gamma * rho, -2) + k * k * Math.Pow(rho, 4 * sigma) + mu * mu)) </EC>
+    <EC i="0" j="1"> (1 - 4 * sigma) / ((1 - 2 * sigma) * rho) </EC>
+    <EC i="0" j="2"> 1.0 </EC>
+
+    <!-- omega^1 coefficients -->
+    <EC i="1" j="0"> 0.0 </EC>
+    <EC i="1" j="1"> 0.0 </EC>
+
+    <!-- omega^2 coefficients -->
+    <EC i="2" j="0"> Math.Pow(rho, -4 * sigma) </EC>
+  </EquationCoefficients>
+
+  <!-- Boundary conditions -->
+  <!-- Real => (c), Complex => (a, b). Inf, Infinity => Dirichlet -->
+  <BoundaryConditions>
+
+    <!-- Dirichlet, Neumann, Robin(a, b), Robin(c), Sommerfeld(a, b), Sommerfeld(c) -->
+    <!--Sommerfeld(Custom), Sommerfeld(Incoming), Sommerfeld(Outgoing) -->
+    <Boundary>
+      <Left> Neumann </Left>
+      <Right> Sommerfeld(Outgoing) </Right>
+    </Boundary>
+
+    <!-- Sigma(omega) with omega as the only free variable. All other symbols come from <Parameters>. -->
+    <Sigma free="Complex omega">
+      <Left> Complex.ImaginaryOne * omega </Left>
+      <Right> - Complex.ImaginaryOne * omega </Right>
+    </Sigma>
+  </BoundaryConditions>
+
+  <!-- Transformer parameters -->
+  <Transformer>
+    <!-- s = stiff, w = width, l = scale, Blend(s), Blend(s, w, l), Blend(s, w, l),  -->
+    <Blender> Blend(1) </Blender>
+
+    <!-- Inert, Deradiate, Manual(c), Manual(a, b), Composite(c), Composite(a, b) -->
+    <Transform>
+      <Left> Inert </Left>
+      <Right> Composite(-0.01) </Right>
+    </Transform>
+  </Transformer>
+
+  <!-- QNM Finder control parameters -->
+  <QNMFinder>
+    <!-- W: Expansion origin, N: Collocation number, A: Accuracy -->
+    <Guesser>
+      <W> (0.0, 0.0) </W>
+      <N> 64 </N>
+      <A> 1e-6 </A>
+    </Guesser>
+
+    <!-- B: Beyn pencil width, C: Domain center, D: Domain edge, Q: Quality factor, R: Randomize Beyn pencil, S: Domain subdivision number -->
+    <Primer>
+      <!-- Number of vectors in Beyn's pencil -->
+      <B> 8 </B>
+      <!-- Domain specification -->
+      <C> (3.0, -3.0) </C>
+      <D> 6 </D>
+      <!-- Beyn Pencil specification -->
+      <Q> 8.0 </Q>
+      <R> 1e-2 </R>
+      <!-- Number of subdivision of the domain -->
+      <S> 121 </S>
+    </Primer>
+
+    <!-- M: Quadrature number -->
+    <Estimator>
+      <M> 128 </M>
+      <V> 0 </V>
+    </Estimator>
+
+    <!-- E: Estimate count, L: Lapping number, P: Perturbation -->
+    <Seeder>
+      <E> 50 </E>
+      <L> 2 </L>
+      <P> 0.0 </P>
+    </Seeder>
+
+    <!-- I: Iteration count -->
+    <Refiner>
+      <I> 128 </I>
+    </Refiner>
+
+    <!-- U: Ultra-refinement mode -->
+    <Feeder>
+      <!-- Automatic, Manual, Off, All, Some, None -->
+      <U> Some </U>
+    </Feeder>
+
+    <!-- J: Maximum refinement depth -->
+    <Superfiner>
+      <J> 3 </J>
+    </Superfiner>
+  </QNMFinder>
+
+  <Settings>
+    <!-- Toggle preloading objects to memory -->
+    <Preload> True </Preload>
+
+    <!-- Toggle printing to console -->
+    <ConsolePrint> True </ConsolePrint>
+  </Settings>
+
+  <!-- Folder structure. Folder must be less than or equal to Parameters count. -->
+  <OutputPath>
+    <Folder> 3 </Folder>
+  </OutputPath>
+
+</Config>
