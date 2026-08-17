@@ -32,7 +32,7 @@ public class Config
     // ------------------------------------------------------------
     // Transform parameters
     // ------------------------------------------------------------
-    public string TRBlend { get; private set; }             // Transformer global settings
+    public string TRBlend { get; private set; }             // Transformer blender settings
     public string[] TRParams { get; private set; }          // Transform parameters [Left, Right]
 
     // ------------------------------------------------------------
@@ -54,6 +54,7 @@ public class Config
 
     // --- Estimator ---
     public int M { get; private set; }              // Quadrature number
+    public int V { get; private set; }              // Depth parameter
 
     // --- Seeder ---
     public int E { get; private set; }              // Estimate count
@@ -163,7 +164,7 @@ public class Config
         // ------------------------------
         XElement transform = root.Element("Transformer");
 
-        config.TRBlend = transform.Element("Blend").Value.Trim();
+        config.TRBlend = transform.Element("Blender").Value.Trim();
 
         XElement trParams = transform.Element("Transform");
 
@@ -193,6 +194,7 @@ public class Config
         // --- Estimator ---
         XElement estimator = qnmfinder.Element("Estimator");
         config.M = (int)estimator.Element("M");
+        config.V = (int)estimator.Element("V");
 
         // --- Seeder ---
         XElement seeder = qnmfinder.Element("Seeder");
@@ -224,12 +226,17 @@ public class Config
         // ------------------------------
         XElement output = root.Element("OutputPath");
 
-        config.FolderParams = output.Element("Folder")
-            .Value.Split(',').Select(p => p.Trim()).ToList();
+        int folderCount = int.Parse(output.Element("Folder").Value.Trim());
 
-        config.SubfolderParams = output.Element("Subfolder")
-            .Value.Split(',').Select(p => p.Trim()).ToList();
+        if (folderCount < 0) throw new Exception("OutputPath Folder count must be nonnegative.");
+        if (folderCount > config.Physics.Count) throw new Exception("OutputPath Folder count exceeds the number of parameters in <Parameters>.");
 
+        config.FolderParams = config.Physics.Keys.Take(folderCount).ToList();
+        config.SubfolderParams = config.Physics.Keys.Skip(folderCount).ToList();
+
+        // ------------------------------
+        // Return the populated config object
+        // ------------------------------
         return config;
     }
 
@@ -243,16 +250,16 @@ public class Config
 
         if (configMissing)
         {
-            Console.Write("\nConfig.xml is not found. Running with default configuration...");
+            Console.Write("\nConfig.xml is not found. Running with default Config.xml...");
 
-            string resourceName = "QNMFinder.Resources.DefaultConfig.xml";
+            string resourceName = "QNMFinder.Resources.Config.xml";
             string xml = LoadResource(resourceName);
             File.WriteAllText("Config.xml", xml);
         }
 
         if (autoRunMissing)
         {
-            Console.Write("\nAutoRun.bat is not found. Creating default AutoRun.bat...");
+            Console.Write("\nAutoRun.bat is not found. Generating default AutoRun.bat...");
 
             string resourceName = "QNMFinder.Resources.AutoRun.bat";
             string bat = LoadResource(resourceName);

@@ -1,11 +1,16 @@
 ﻿// File: Initiator.cs
 
-using System.Numerics;
-using System.Reflection;
-using System.Linq.Expressions;
 using MathNet.Numerics;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
+using System.IO;
+using System.Linq.Expressions;
+using System.Net.NetworkInformation;
+using System.Numerics;
+using System.Reflection;
+using System.Runtime.ConstrainedExecution;
+using System.Xml.Linq;
+using CLACFramework;
 
 namespace IOFramework;
 
@@ -44,19 +49,18 @@ public static class Initiator
     private static Delegate CompileDynamic(string className, string methodName, string signature, string expressionBody)
     {
         string code = $@"
-                        using System;
-                        using System.Numerics;
-                        using MathNet.Numerics;
+                    using System;
+                    using System.Numerics;
+                    using MathNet.Numerics;
 
-                        public static class {className}
-                        {{
-                            public static Complex {methodName}({signature}) => {expressionBody};
-                        }}";
+                    public static class {className}
+                    {{
+                        public static Complex {methodName}({signature}) => {expressionBody};
+                    }}";
 
         var syntaxTree = CSharpSyntaxTree.ParseText(code);
 
-        var refs = AppDomain.CurrentDomain.GetAssemblies().Where(a => !a.IsDynamic && !string.IsNullOrEmpty(a.Location))
-            .Select(a => MetadataReference.CreateFromFile(a.Location)).ToList();
+        var refs = BuildMetadataReferences();
 
         var compilation = CSharpCompilation.Create(assemblyName: $"{className}Assembly", syntaxTrees: new[] { syntaxTree },
             references: refs, options: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
@@ -140,9 +144,8 @@ public static class Initiator
         Delegate rawRight = CompileDynamic("DynamicSigmaRight", "SigmaRight", signature, customSigma[1]);
         Func<Complex, Complex> SigmaRight = Wrap<Complex>(rawRight, free, boundNames, physics);
 
-        return new[] { new[] { SigmaLeft }, new[]{ SigmaRight } };
+        return new[] { new[] { SigmaLeft, Calculus.Derivative(SigmaLeft) }, new[]{ SigmaRight, Calculus.Derivative(SigmaRight) } };
     }
-
 
     // ------------------------------------------------------------
     // Generic wrapper: T is the type of the free variable
@@ -179,4 +182,57 @@ public static class Initiator
         Type delegateType = Expression.GetDelegateType(paramTypes.ToArray());
         return method.CreateDelegate(delegateType);
     }
+
+    // ------------------------------------------------------------
+    // Create metadata references
+    // ------------------------------------------------------------
+    private static List<MetadataReference> BuildMetadataReferences()
+    {
+        Dictionary<string, MetadataReference> refs = new(StringComparer.OrdinalIgnoreCase);
+
+        foreach (Assembly asm in AppDomain.CurrentDomain.GetAssemblies())
+        {
+            if (asm.IsDynamic || string.IsNullOrWhiteSpace(asm.Location))
+                continue;
+
+            TryAddMetadataReference(asm.Location, refs);
+        }
+
+        AddDllReferences(Path.Combine(AppContext.BaseDirectory, "Extensions"), refs);
+
+        string currentDir = Directory.GetCurrentDirectory();
+
+        if (!string.Equals(currentDir, AppContext.BaseDirectory, StringComparison.OrdinalIgnoreCase))
+            AddDllReferences(Path.Combine(currentDir, "Extensions"), refs);
+
+        return refs.Values.ToList();
+    }
+
+    private static void AddDllReferences(string directory, Dictionary<string, MetadataReference> refs)
+    {
+        if (!Directory.Exists(directory))
+            return;
+
+        foreach (string dll in Directory.EnumerateFiles(directory, "*.dll", SearchOption.AllDirectories).OrderBy(p => p, StringComparer.OrdinalIgnoreCase))
+            TryAddMetadataReference(dll, refs);
+    }
+
+    private static void TryAddMetadataReference(string dll, Dictionary<string, MetadataReference> refs)
+    {
+        if (refs.ContainsKey(dll))
+            return;
+
+        try
+        {
+            AssemblyName.GetAssemblyName(dll);
+
+            refs[dll] = MetadataReference.CreateFromFile(dll);
+            Assembly.LoadFrom(dll);
+        }
+        catch
+        {
+            // Ignore native, incompatible, missing-dependency, or otherwise invalid DLLs.
+        }
+    }
+
 }
